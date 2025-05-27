@@ -6,8 +6,6 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-import psycopg2
-import psycopg2.extras
 import uvicorn
 import json
 import os
