@@ -1,0 +1,21 @@
+# 1. Usa come base Python 3.9 (coerente con PYTHON_VERSION)
+FROM python:3.9-slim
+
+# 2. Imposta la working directory
+WORKDIR /app
+
+# 3. Copia i requisiti e installa le dipendenze
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 4. Copia tutto il codice della app
+COPY . .
+
+# 5. Imposta variabile d’ambiente per Uvicorn
+ENV PORT=${SERVER_PORT:-10000}
+
+# 6. Espone la porta (Render la mapperà inoltre automaticamente)
+EXPOSE $PORT
+
+# 7. Comando di startup (Uvicorn)
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "${PORT}"]

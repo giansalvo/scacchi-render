@@ -35,16 +35,13 @@ connections_lock = asyncio.Lock()
 active_connections = []
 
 # Configurazione da variabili d'ambiente
-host = os.getenv("DB_HOST")
-user = os.getenv("DB_USER")
-password = os.getenv("DB_PASSWORD")
-db_name = os.getenv("DB_NAME")
-db_port = int(os.getenv("DB_PORT"))
 SERVER_PORT = int(os.getenv("SERVER_PORT"))
+
+state = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
 
 # Verifica configurazione obbligatoria
 missing_vars = []
-for var in ["DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME", "DB_PORT", "SERVER_PORT"]:
+for var in ["SERVER_PORT"]:
     if not os.getenv(var):
         missing_vars.append(var)
 
@@ -52,18 +49,9 @@ if missing_vars:
     raise EnvironmentError(f"Variabili d'ambiente mancanti: {', '.join(missing_vars)}")
 
 print("=== ENVIRONMENT ===")
-for key in ["DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME", "DB_PORT", "SERVER_PORT"]:
+for key in ["SERVER_PORT"]:
     print(f"{key} = {os.getenv(key)}")
 
-
-def get_db():
-    return psycopg2.connect(
-        host=host,
-        user=user,
-        password=password,
-        dbname=db_name,
-        port=db_port
-    )
 
 @app.get("/hello")
 async def index():
@@ -87,12 +75,7 @@ async def index():
 
 @app.get("/api/state")
 async def get_state():
-    db = get_db()
-
-    cursor = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cursor.execute("SELECT fen FROM game_state WHERE id = 1")
-    result = cursor.fetchone()
-    return {"fen": result["fen"]}
+    return {"fen": state}
 
 
 @app.websocket("/ws")
@@ -145,8 +128,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @app.post("/api/move")
 async def receive_move(request: Request):
-    db = None
-    cursor = None
+    global state
     try:
         print("[DEBUG] Receiving move from client...")
         raw = await request.body()
@@ -156,32 +138,15 @@ async def receive_move(request: Request):
         move = data.get("move")
         fen = data.get("fen")
         print("[DEBUG] Parsed move:", move, "FEN:", fen)
-
-        # Test della connessione al database
-        db = get_db()
-        cursor = db.cursor()
-
-        # Esegui una query di test per verificare che il database risponda
-        cursor.execute("SELECT 1")
-        test_result = cursor.fetchone()
-        print("[DEBUG] Database connection test:", test_result)
-
-        # Operazioni principali
-        cursor.execute("INSERT INTO moves (move_notation, fen) VALUES (%s, %s)", (move, fen))
-        cursor.execute("UPDATE game_state SET fen = %s WHERE id = 1", (fen,))
-        db.commit()
-        print("[DEBUG] Updated database with new move")
-
+        state = fen
+        move = "placeholder"
+        print("[DEBUG] Updated state with new move")
         # Invia la mossa a tutti i client WebSocket
         for client in active_connections:
-            await client.send_json({"move": move, "fen": fen})
+            await client.send_json({"move": move, "fen": state})
             print("[DEBUG] Broadcasted move to client")
 
         return {"status": "ok"}
-
-    except psycopg2.Error as db_error:
-        print("[ERROR] Database error:", str(db_error))
-        return {"status": "error", "details": "Database operation failed"}
 
     except json.JSONDecodeError as json_error:
         print("[ERROR] JSON decode error:", str(json_error))
@@ -191,24 +156,10 @@ async def receive_move(request: Request):
         print("[ERROR] Unexpected error:", str(e))
         return {"status": "error", "details": "Internal server error"}
 
-    finally:
-        # Chiudi sempre cursor e connessione
-        if cursor is not None:
-            cursor.close()
-        if db is not None and db.is_connected():
-            db.close()
-            print("[DEBUG] Database connection closed")
 
 @app.get("/api/health")
 async def health_check():
-    try:
-        db = get_db()
-        cursor = db.cursor()
-        cursor.execute("SELECT 1")
-        return {"database": "ok"}
-    except Exception as e:
-        print("[ERROR] Database health check failed:", str(e))
-        return {"database": "error", "details": str(e)}
+    return {"connection": "ok"}
 
 if __name__ == "__main__":
     print(f"[INFO] Starting FastAPI app on port ${SERVER_PORT}")
