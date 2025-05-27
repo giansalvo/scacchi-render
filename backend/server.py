@@ -17,7 +17,7 @@ import asyncio
 # Ottieni il percorso assoluto della directory del progetto
 BASE_DIR = Path(__file__).parent.parent
 
-app = FastAPI()
+app = FastAPI(debug=True)
 app.mount("/static", StaticFiles(directory="./frontend"), name="static")
 #app.mount("/js", StaticFiles(directory="frontend/js"), name="js")
 
@@ -121,7 +121,10 @@ async def websocket_endpoint(websocket: WebSocket):
         async with connections_lock:
             if websocket in active_connections:
                 active_connections.remove(websocket)
-        await websocket.close()
+        try:
+            await websocket.close()
+        except RuntimeError:
+            pass  # già chiuso
         print(f"[STATUS] Remaining clients: {len(active_connections)}")
 
 @app.post("/api/move")
